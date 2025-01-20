@@ -1,30 +1,42 @@
-# Compiler and flags
 CC = gcc
 CFLAGS = -std=c99 -Wall -Wextra -Werror -O2
-LDFLAGS = -L./ -laes
+LDFLAGS = -lcunit -Wl,-rpath=./
+PREFIX = $(HOME)/.local
 
-# Phony targets
-.PHONY: all test main clean
+CUNIT_PATH = /usr/include/CUnit/CUnit.h
+CUNIT_VER = $(shell [ -f $(CUNIT_PATH) ] && cat $(CUNIT_PATH) | awk '$$0~/^\#define CU_VERSION/{print $$NF}' || echo "not_found")
 
-# Default target: build AES library and test
+.PHONY: all test sample
 all: aes
 
-# Build AES library
 aes: aes.c
 	$(CC) $(CFLAGS) -c -o aes.o $<
 	$(CC) $(CFLAGS) -shared -fPIC -o libaes.so aes.o
 	$(AR) rcs libaes.a aes.o
 
-# Test program for AES library
 test: aes test_case.c
-	$(CC) $(CFLAGS) -o test_case test_case.c $(LDFLAGS)
+ifeq ($(CUNIT_VER), "2.1-2")
+	$(CC) $(CFLAGS) -o test_case test_case.c $(LDFLAGS) -DCUNIT_VER=2
+else ifneq ($(CUNIT_VER), "not_found")
+	$(CC) $(CFLAGS) -o test_case test_case.c $(LDFLAGS) -DCUNIT_VER=1
+else
+	@echo "CUnit not found. Please install CUnit development library."
+	exit 1
+endif
 	./test_case
 
-# Main program for additional testing
-main: aes main.c
-	$(CC) $(CFLAGS) -o main main.c $(LDFLAGS)
-	./main
+sample: aes sample.c
+	$(CC) $(CFLAGS) -o sample sample.c -L./ -laes
+	./sample
 
-# Clean up generated files
+.PHONY: install uninstall clean
+install: aes
+	install libaes.so $(PREFIX)/lib/
+	ln -sf $(PREFIX)/lib/libaes.so $(HOME)/.local/lib/libaes.so
+	install aes.h $(PREFIX)/include/aes.h
+	
+uninstall:
+	rm -f $(PREFIX)/lib/libaes.so $(HOME)/.local/lib/libaes.so $(PREFIX)/include/aes.h
+
 clean:
-	rm -f *.o *.so *.a test_case main
+	rm -f *.o *.so *.a test_case sample
